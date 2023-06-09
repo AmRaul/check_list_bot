@@ -22,23 +22,27 @@ bot = telebot.TeleBot(api_bot)
 
 # Создаем переменные для записи в бд (после изменить на json)
 class Data:
-    name = None  # Название автомобиля
-    vin = None  # вин автомобиля
-    grade_body = None  # Оценка кузова
-    rapids = None  # Пороги
-    bottom_car = None  # Дно машины
-    engine = None  # Двигатель
-    suspension = None  # Подвеска
-    transmission_type = None  # Тип трансмиссии
-    transmission = None  # Коробка передач
-    rudder = None  # Руль
-    interior = None  # Интерьер
-    documents = None  # Документы
+    name = None  # auto name
+    vin = None  # VIN auto
+    check_auto_vin = None # check VIN
+    grade_body = None
+    rapids = None
+    bottom_car = None
+    engine = None
+    suspension = None
+    transmission_type = None
+    transmission = None
+    rudder = None
+    interior = None
+    documents = None
     show_auto = None
+    change_ad = None
+    count_dtp = None
 
     def clean_data(self):
         self.name = None
         self.vin = None
+        self.check_auto_vin = None
         self.grade_body = None
         self.rapids = None
         self.bottom_car = None
@@ -50,42 +54,28 @@ class Data:
         self.interior = None
         self.documents = None
         self.show_auto = None
-
+        self.change_ad = None
+        self.count_dtp = None
 
 data = Data()
 
 
-# Начинаем с входной команды
+# 1 Начинаем с входной команды
 @bot.message_handler(commands=['help', 'start', 'go'])
 def start(message):
-    data.clean_data()
     mess = f'Начнем, {message.from_user.first_name}?'
     bot.send_message(message.chat.id, mess)
     bot.register_next_step_handler(message, get_user_text)
 
 
-# Спрашиваем наименование авто подключаем и создаем БД и таблицу если ее нет.
+# 2 Спрашиваем наименование авто подключаем и создаем БД и таблицу если ее нет.
 def get_user_text(message):
-    conn = sqlite3.connect('dataBase.sql')
-    cur = conn.cursor()
-
-    cur.execute('DROP TABLE IF EXISTS auto')
-
-    cur.execute(
-        'CREATE TABLE IF NOT EXISTS auto (id int auto_increment primary key, auto_name varchar(50), auto_vin varchar('
-        '50), grade_body int, rapids varchar(30), bottom_car varchar(30), engine varchar(80),suspension varchar(50), '
-        'transmission_type varchar(50), transmission varchar(50), rudder varchar(50), interior varchar(50), '
-        'documents varchar(50))')
-    conn.commit()
-    cur.close()
-    conn.close()
-
     bot.send_message(message.chat.id, 'Привет, сейчас начнем осмотр')
     bot.send_message(message.chat.id, 'Введи наименование авто')
     bot.register_next_step_handler(message, auto_name)  # вызываем следующую ф-ю
 
 
-# Сохраняем в глобальную переменную наименование авто, спрашиваем ВИН, и выз следующий пункт
+# 3 Сохраняем в глобальную переменную наименование авто, спрашиваем ВИН, и выз следующий пункт
 def auto_name(message):
     global data
     data.name = message.text
@@ -93,21 +83,38 @@ def auto_name(message):
     bot.register_next_step_handler(message, auto_vin)
 
 
-# Сохраняем ВИН и спрашиваем общую оценку кузова
+# 4 Сохраняем ВИН
 def auto_vin(message):
     global data
     data.vin = message.text
+    bot.send_message(message.chat.id, 'Проверка VIN номера. Да или нет')
+    bot.register_next_step_handler(message, check_auto_vin)
+
+# 5 Сохраням ответ и спрашиваем общую оценку кузова
+def check_auto_vin(message):
+    global data
+    data.check_auto_vin = message.text
+    bot.send_message(message.chat.id, 'Документы. Напиши комментарий')
+    bot.register_next_step_handler(message, check_documents)
+
+def check_documents(message):
+    global data
+    data.documents = message.text
     bot.send_message(message.chat.id, 'Кузов. Состояние по 5-ой шкале. Введи число')
     bot.register_next_step_handler(message, auto_grade)
 
-
-# сохраняем оценку кузова и спрашиваю про пороги
+# 6 сохраняем оценку кузова и спрашиваю про пороги
 def auto_grade(message):
     global data
     data.grade_body = message.text
+    bot.send_message(message.chat.id, 'Напиши количество ДТП')
+    bot.register_next_step_handler(message, count_dtp)
+
+def count_dtp(message):
+    global data
+    data.count_dtp = message.text
     bot.send_message(message.chat.id, 'Пороги. Состояние по 5-ой шкале. Введи число')
     bot.register_next_step_handler(message, auto_rapids)
-
 
 # Сохраняем оценку порогов и спрашиваем
 def auto_rapids(message):
@@ -180,32 +187,18 @@ def auto_rudder(message):
     bot.register_next_step_handler(message, auto_interior)
 
 
-# Интерьер в машине
+# Изменения объявления
 def auto_interior(message):
     global data
     data.interior = message.text
-    bot.send_message(message.chat.id, 'Документы. Напиши комментарий')
+    bot.send_message(message.chat.id, 'Изменения объявления были?')
     bot.register_next_step_handler(message, insert_check_list)
 
 
 # Подкл к БД, записываем полученные данные и выводим кнопку с результатом
 def insert_check_list(message):
     global data
-    data.documents = message.text
-
-    conn = sqlite3.connect('dataBase.sql')
-    cur = conn.cursor()
-
-    cur.execute(
-        "INSERT INTO auto (auto_name, auto_vin, grade_body, rapids, bottom_car, engine, suspension, "
-        "transmission_type, transmission, rudder, interior, documents) VALUES ('%s','%s','%s','%s','%s','%s','%s',"
-        "'%s','%s','%s','%s','%s')" % (
-            data.name, data.vin, data.grade_body, data.rapids, data.bottom_car, data.engine, data.suspension,
-            data.transmission_type, data.transmission, data.rudder,
-            data.interior, data.documents))
-    conn.commit()
-    cur.close()
-    conn.close()
+    data.change_ad = message.text
 
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton('Результат', callback_data='result'))
@@ -216,21 +209,24 @@ def insert_check_list(message):
 @bot.callback_query_handler(func=lambda call: True)
 def result_auto(call):
     global data
-    conn = sqlite3.connect('dataBase.sql')
-    cur = conn.cursor()
-
-    cur.execute("SELECT * FROM auto")
-    all_auto = cur.fetchall()
-
-    data.show_auto = ''
-    for el in all_auto:
-        data.show_auto += f'Машина: {el[1]},\n VIN: {el[2]},\n Общая оценка кузова: {el[3]},\n Пороги: {el[4]},\n Дно машины: {el[5]},\n Двигатель: {el[6]},\n' \
-                          f' Подвеска: {el[7]},\n Тип трансмиссии: {el[8]},\n Коробка передач: {el[9]},\n Руль: {el[10]},\n Интерьер: {el[11]},\n Документы: {el[12]}'
-
-    cur.close()
-    conn.close()
+    data.show_auto = f'1.Машина: {data.name},\n' \
+                     f'2.VIN: {data.vin},\n ' \
+                     f'3.Проверка VIN: {data.check_auto_vin},\n ' \
+                     f'4.Документы: {data.documents},\n ' \
+                     f'5.Общая оценка кузова: {data.grade_body},\n ' \
+                     f'6.Кол-во ДТП: {data.count_dtp},\n ' \
+                     f'7.Пороги: {data.rapids},\n ' \
+                     f'8.Дно машины: {data.bottom_car},\n ' \
+                     f'9.Руль: {data.rudder},\n ' \
+                     f'10.Интерьер: {data.interior}, \n' \
+                     f'11.Двигатель: {data.engine},\n' \
+                     f'12.Подвеска: {data.suspension},\n ' \
+                     f'13.Тип трансмиссии: {data.transmission_type},\n ' \
+                     f'14.Коробка передач: {data.transmission},\n ' \
+                     f'15.Изменение объявления: {data.change_ad}'
 
     bot.send_message(call.message.chat.id, data.show_auto)
+
 
 
 # Сообщения фото сохраняем в папку
